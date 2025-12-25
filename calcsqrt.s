@@ -21,7 +21,7 @@ _start:
     movq $1, %rdx
     syscall
 
-    flush_newline:
+    flush_buffer:
     movq $0, %rax
     movq $0, %rdi
     lea tmp(%rip), %rsi
@@ -29,7 +29,7 @@ _start:
     syscall
     cmpb $0x0A, tmp(%rip)
     je done_flush
-    jmp flush_newline
+    jmp flush_buffer
 
     done_flush:
     cmpb $'0', number(%rip)
@@ -37,17 +37,48 @@ _start:
     cmpb $'9', number(%rip)
     jg error
     xorq %rax, %rax
-    movq number(%rip), %rax
-    subq $0x30, %rax
+    movb number(%rip), %al
+    subb $0x30, %al
 
     cvtsi2ss %rax, %xmm0
 
     sqrtss %xmm0, %xmm0
     xorq %rax, %rax
     cvttss2si %xmm0, %rax
-    movb %al, buffer(%rip)
-    addb $0x30, buffer(%rip)
 
+    movb %al, buffer+0(%rip)
+    addb $0x30, buffer+0(%rip)
+
+    movb dot(%rip), %al
+    movb %al, buffer+1(%rip)
+
+    xorq %rax, %rax
+    movb buffer+0(%rip), %al
+    subb $0x30, %al
+
+    cvtsi2ss %rax, %xmm1
+    subss %xmm1, %xmm0
+
+    movq $2, %rbx
+    storedp:
+    movss ten(%rip), %xmm1
+    mulss %xmm1, %xmm0
+    xorq %rax, %rax
+    cvttss2si %xmm0, %rax
+    lea buffer(%rip), %rdi
+    movb %al, (%rdi,%rbx,1)
+    addb $0x30, (%rdi, %rbx, 1)
+    xorq %rax, %rax
+    movb (%rdi, %rbx, 1), %al
+    subb $0x30, %al
+    cvtsi2ss %rax, %xmm1
+    subss %xmm1, %xmm0
+    inc %rbx
+    cmp $9, %rbx
+    je print
+    jmp storedp
+
+    print:
     movq $1, %rax
     movq $1, %rdi
     lea m2_start(%rip), %rsi
@@ -57,45 +88,8 @@ _start:
     movq $1, %rax
     movq $1, %rdi
     lea buffer(%rip), %rsi
-    movq $1, %rdx
+    movq $9, %rdx
     syscall
-
-    movq $1, %rax
-    movq $1, %rdi
-    lea dot(%rip), %rsi
-    movq $1, %rdx
-    syscall
-
-    subb $0x30, buffer(%rip)
-    xorq %rax, %rax
-    movb buffer(%rip), %al
-
-    cvtsi2ss %rax, %xmm1
-    subss %xmm1, %xmm0
-
-    movq $7, %rbx
-    printdp:
-    movss ten(%rip), %xmm1
-    mulss %xmm1, %xmm0
-    xorq %rax, %rax
-    cvttss2si %xmm0, %rax
-    movb %al, buffer(%rip)
-    addb $0x30, buffer(%rip)
-    movq $1, %rax
-    movq $1, %rdi
-    lea buffer(%rip), %rsi
-    movq $1, %rdx
-    syscall
-    subb $0x30, buffer(%rip)
-    xorq %rax, %rax
-    movb buffer(%rip), %al
-    cvtsi2ss %rax, %xmm1
-    subss %xmm1, %xmm0
-    dec %rbx
-    cmp $0, %rbx
-    je end
-    jmp printdp
-
     end:
     movq $60, %rax
     xorq %rdi, %rdi
@@ -126,17 +120,18 @@ error_start:
     .ascii "Invalid input!\n\r"
 error_end:
 
-dot:
-    .ascii "."
 
 .section .bss
 tmp:
     .skip 1
 buffer:
-    .skip 1
+    .skip 9
 number:
     .skip 1
 
 .section .rodata
 ten:
     .float 10
+
+dot:
+    .ascii "."
